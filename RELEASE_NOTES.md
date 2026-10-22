@@ -27,6 +27,11 @@ server and vice versa.
 - Not implemented: Creature-stage gameplay synchronisation. Two players still do
   not see each other's creature, a shared planet, shared herds or creature
   interactions; the Creature simulator stays local to each window.
+- Compatibility checked in both directions with a raw protocol probe: an
+  unmodified 1.0.1 client talks to this server as before, and a patched client
+  talking to an unpatched 1.0.1 server receives
+  `{"type":"error","message":"Unknown message type"}` while the session stays
+  alive and the client keeps the connection.
 - Verified with the shipped client code and the real session server over TCP:
   `tests/native-stage.test.mjs` completes the real invitation handshake with two
   native clients and moves the shared world from `cell` to `creature`, and the

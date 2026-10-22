@@ -17,7 +17,9 @@ Upstream stops the co-op session at the end of the Cell stage: the mod intercept
 
 **Not implemented:** Creature-stage gameplay synchronisation. Two players still do not see each other's creature, a shared planet, shared herds or creature interactions; the Creature simulator stays local to each window. The land editor remains shared, because the editor is the design step for the creature.
 
-The patch was verified with the shipped client code and the real session server over TCP (`node tests/native-stage.test.mjs` moves a shared world from "cell" to "creature"), with the mod's own suites (148 protocol assertions, 119 native assertions), and by loading the rebuilt DLL into two real game windows. It has **not** been verified by playing the Cell stage to its end in a running game, because that needs a full playthrough of the first stage.
+**Compatibility, checked in both directions.** An unmodified 1.0.1 client talks to this server as before: the new message only adds a field to the state broadcast. A patched client talking to an **unpatched** 1.0.1 server gets `{"type":"error","message":"Unknown message type"}` back; the server rolls the protocol state back, keeps the session alive and the client shows the text in its status line instead of disconnecting. The co-op session then simply stays in the Cell stage, as it did before.
+
+The patch was verified with the shipped client code and the real session server over TCP (`node tests/native-stage.test.mjs` moves a shared world from "cell" to "creature"), with the mod's own suites (148 protocol assertions, 119 native assertions), with a raw protocol probe against the patched and the unpatched server, and by loading the rebuilt DLL into two real game windows. It has **not** been verified by playing the Cell stage to its end in a running game, because that needs a full playthrough of the first stage.
 
 ## End of the first stage
 
