@@ -143,7 +143,9 @@ namespace SporeCoop
             loaded.InviteAccepted = false;
             loaded.InviteFrom = null;
             loaded.HostPaused = false;
-            loaded.CellStageComplete = false;
+            // The Cell stage completion is a fact about the shared world and
+            // not a transient session flag. A server restart must not lose it,
+            // or the Creature stage transition would be refused.
             return loaded;
         }
 
@@ -728,6 +730,25 @@ namespace SporeCoop
                 Changed();
                 return;
             }
+            if (type == "stageTransition")
+            {
+                if (!State.InviteAccepted) throw new ArgumentException("Invitation must be accepted");
+                string stage = Text(data, "stage", 8);
+                if (stage != "creature") throw new ArgumentException("Unsupported stage transition");
+                if (Integer(data,"worldGeneration",1,long.MaxValue)!=State.WorldGeneration)
+                    throw new ArgumentException("Wrong world generation");
+                // Both clients report the stage they entered. The first report
+                // advances the shared world; later reports are idempotent.
+                if (State.Stage == stage) { Send(peer,Snapshot()); return; }
+                if (State.Stage != "cell") throw new ArgumentException("Unsupported stage transition");
+                if (!State.CellStageComplete) throw new ArgumentException("Cell stage is not complete");
+                State.Stage = stage;
+                State.Evolving=false; State.Editor=null; State.EditorID=0;
+                Ready.Clear(); Pending=null;
+                Changed();
+                Broadcast(Snapshot());
+                return;
+            }
             if (type == "worldLeave")
             {
                 if (!State.InviteAccepted || peer.Role!=State.InviteFrom)
@@ -747,7 +768,9 @@ namespace SporeCoop
             if (type == "editorOpen")
             {
                 if (!State.InviteAccepted) throw new ArgumentException("Invitation must be accepted");
-                if (State.CellStageComplete) throw new ArgumentException("Version 1 ends after the Cell stage");
+                // The land editor that follows the Cell stage opens the Creature
+                // stage design, so the editor stays available after the Cell
+                // stage is complete.
                 long editorId = Integer(data, "editorId", 0, uint.MaxValue);
                 string initial=data.ContainsKey("species") ? Text(data,"species",350000) : "";
                 int budget=(int)Integer(data,"editorBudget",0,100000000);
@@ -850,7 +873,7 @@ namespace SporeCoop
             }
             if (type == "beginEvolution")
             {
-                if (State.CellStageComplete) throw new ArgumentException("Version 1 ends after the Cell stage");
+                // The species editor stays available for the Creature stage.
                 HostOnly(peer);
                 Version(data);
                 string owner = Text(data, "owner", 5);
@@ -1145,7 +1168,7 @@ namespace SporeCoop
                 if (hostToken.Length < 24 || hostToken.Length > 128 || guestToken.Length < 24 ||
                     guestToken.Length > 128 || hostToken == guestToken) throw new ArgumentException("Use distinct tokens of 24-128 characters");
                 string save = options.TryGetValue("--save", out value) ? value : Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "session.json");
-                Console.WriteLine("SporeCoop Version 1 server (protocol 10). Supported stage: Cell.");
+                Console.WriteLine("SporeCoop Version 1 server (protocol 10). Supported stages: Cell, Creature.");
                 Console.WriteLine("HOST TOKEN (keep local): " + hostToken);
                 Console.WriteLine("GUEST TOKEN (share with friend): " + guestToken);
                 new Server(address, port, hostToken, guestToken, save).Run();

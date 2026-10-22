@@ -340,6 +340,7 @@ namespace
             gSnapshot.worldGeneration = 0;
             gSnapshot.hostPaused = false;
             gSnapshot.cellStageComplete = false;
+            gSnapshot.stage.clear();
             gSnapshot.progressInitialized = false;
             gSnapshot.progressAckSequence = 0;
             gSnapshot.revision = 0;
@@ -585,6 +586,8 @@ namespace
             ReadBool(json, "hostPaused", hostPaused);
             bool cellStageComplete = false;
             ReadBool(json, "cellStageComplete", cellStageComplete);
+            std::string stage;
+            ReadString(json, "stage", stage);
             std::string inviteFrom;
             ReadString(json, "inviteFrom", inviteFrom);
             std::uint64_t worldGeneration = 0;
@@ -645,6 +648,7 @@ namespace
             gSnapshot.worldGeneration = worldGeneration;
             gSnapshot.hostPaused = hostPaused;
             gSnapshot.cellStageComplete = cellStageComplete;
+            gSnapshot.stage = stage;
             gSnapshot.editorRole = editorRole;
             gSnapshot.editorID = editorID;
             if (speciesSequence >= gSnapshot.speciesSequence)
@@ -733,6 +737,7 @@ namespace
         gSnapshot.inviteAccepted = false;
         gSnapshot.inviteFrom.clear();
         gSnapshot.hostPaused = false;
+        gSnapshot.stage.clear();
         gSnapshot.editorOpen = false;
         gSnapshot.editorID = 0;
         gSnapshot.editorRole.clear();
@@ -1040,6 +1045,14 @@ namespace CoopNet
     void SubmitCellStageComplete(std::uint64_t world)
     {
         Queue("{\"type\":\"cellStageComplete\",\"worldGeneration\":"+std::to_string(world)+"}");
+    }
+
+    void SubmitStageTransition(const char* stage, std::uint64_t world)
+    {
+        // The stage name is a fixed vocabulary of the protocol, not free text.
+        std::string name = stage ? stage : "";
+        if (name != "creature") return;
+        Queue("{\"type\":\"stageTransition\",\"stage\":\""+name+"\",\"worldGeneration\":"+std::to_string(world)+"}");
     }
 
     void SubmitNpcSnapshot(const std::vector<NpcState>& npcs, std::uint64_t actionAck)

@@ -190,6 +190,8 @@ try {
   const acceptedInvite = await host.wait(stateMessage(state.revision));
   check(state.inviteAccepted && acceptedInvite.inviteAccepted && !state.invitePending,
     'Accepted invitation unlocks automatic world joining');
+  await failure(host, { type: 'stageTransition', stage: 'creature', worldGeneration: state.worldGeneration },
+    'Cell stage is not complete');
   const historyBytes=Buffer.alloc(140);
   historyBytes.writeUInt32LE(0x31545348,0);historyBytes.writeUInt32LE(1,16);
   const historyPacket={type:'history',worldGeneration:state.worldGeneration,sequence:1,history:historyBytes.toString('base64')};
@@ -528,7 +530,18 @@ try {
     'Invited player finishing History ends the first stage for both windows without advancing the campaign');
   const repeatedComplete=await connected.host.request(complete,stateMessage(state.revision));
   check(repeatedComplete.cellStageComplete && repeatedComplete.revision===state.revision,'Duplicate completion is idempotent');
-  await failure(connected.guest,{type:'editorOpen',editorId:42,editorBudget:0,species:'',speciesName:''},'Version 1 ends');
+  state=await connected.guest.request({type:'editorOpen',editorId:42,editorBudget:0,species:'',speciesName:''},stateMessage(state.revision+1));
+  check(state.evolving && state.editor==='guest','The land editor opens after the Cell stage');
+  await failure(connected.host,{type:'stageTransition',stage:'creature',worldGeneration:state.worldGeneration-1},'world generation');
+  await failure(connected.host,{type:'stageTransition',stage:'tribe',worldGeneration:state.worldGeneration},'Unsupported stage transition');
+  state=await connected.host.request({type:'stageTransition',stage:'creature',worldGeneration:state.worldGeneration},stateMessage(state.revision+1));
+  const peerStage=await connected.guest.wait(stateMessage(state.revision));
+  check(state.stage==='creature' && peerStage.stage==='creature','The Creature stage transition reaches both windows');
+  const repeatedStage=await connected.host.request({type:'stageTransition',stage:'creature',worldGeneration:state.worldGeneration},stateMessage(state.revision));
+  check(repeatedStage.stage==='creature' && repeatedStage.revision===state.revision,'Duplicate stage transition is idempotent');
+  const stageSave=JSON.parse(await readFile(save,'utf8'));
+  check(stageSave.Stage==='creature' && stageSave.CellStageComplete===true,
+    'The Creature stage and the Cell completion are persisted');
   await failure(connected.host,{type:'worldLeave',worldGeneration:state.worldGeneration},'World owner');
   await failure(connected.guest,{type:'worldLeave',worldGeneration:state.worldGeneration-1},'world generation');
   connected.guest.send({type:'worldLeave',worldGeneration:state.worldGeneration});

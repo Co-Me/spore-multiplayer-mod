@@ -246,4 +246,24 @@ for (const field of ['partCinematicPlayed', 'showMateButton', 'firstEditorEntry'
     `${field} must be sent over the cooperative protocol`);
 }
 
+// The Creature stage milestone: a live cooperative session must continue
+// past the Cell stage instead of ending on the version 1 screen.
+const requestEnding = body(ending, 'bool RequestCellStageEnd()', 'void __cdecl LeaveCellStageHook()');
+assert.match(requestEnding, /if \(state\.connected && state\.inviteAccepted\)[\s\S]*CoopNet::SubmitCellStageComplete\(state\.worldGeneration\);[\s\S]*return false;/,
+  'A live cooperative session must report the Cell stage completion and let the native landfall run');
+assert.match(requestEnding, /gCellStageEnd\.Request\(state\.worldGeneration\)/,
+  'The single-player ending must still be requested outside a cooperative session');
+assert.match(updateEnding, /if \(state\.connected && state\.inviteAccepted\)[\s\S]*gCellStageEnd\.Dismiss\(\);[\s\S]*return false;/,
+  'The version 1 ending screen must never take over a live cooperative session');
+assert.match(net, /ReadString\(json, "stage", stage\)/,
+  'The shared stage must be parsed from the session snapshot');
+assert.ok(net.includes('Queue("{\\"type\\":\\"stageTransition\\"'),
+  'The stage transition must be reported to the shared session');
+assert.match(coopUpdate, /Simulator::IsCreatureGame\(\) && snapshot\.inviteAccepted && snapshot\.stage!="creature"/,
+  'Entering the Creature stage must report the transition to the shared session');
+assert.match(coopUpdate, /CoopNet::SubmitStageTransition\("creature",snapshot\.worldGeneration\)/,
+  'The Creature stage transition must be submitted with the world generation of the session');
+assert.match(probe, /gStageTransitionReported=false;[\s\S]*gStageTransitionTick=0;/,
+  'A new cooperative world must allow a fresh stage transition report');
+
 console.log('PASS: native lifecycle source invariants. No gameplay was tested.');

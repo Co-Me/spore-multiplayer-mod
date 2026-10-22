@@ -2426,6 +2426,11 @@ namespace
     constexpr uint32_t kSessionEndedOkID = 0x5C0F1013;
     constexpr uint32_t kCellStageEndMenuID = 0x5C0F1025;
     CoopSession::CellStageEndState gCellStageEnd;
+    // The Creature stage transition is reported to the shared session. It is
+    // repeated until the server confirms the new stage, because the other
+    // player can still be finishing the Cell stage at that moment.
+    bool gStageTransitionReported=false;
+    ULONG64 gStageTransitionTick=0;
 
     const char16_t* CoopText(const char16_t* english, const char16_t* russian)
     {
@@ -3373,6 +3378,8 @@ namespace
             RemoveRemoteCell("another cooperative world selected");
             RemoveHostAppearanceProxy("Another cooperative world selected.");
             RemoveMirroredNpcs("another cooperative world selected");
+            gStageTransitionReported=false;
+            gStageTransitionTick=0;
         }
         if (!gObservedInviteAccepted && snapshot.inviteAccepted)
         {
@@ -3387,6 +3394,21 @@ namespace
         UpdateAuthoritativePause(snapshot);
 
         const ULONG64 now = GetTickCount64();
+        // The Creature stage is a different simulator. Report the transition so
+        // the shared session follows both players into it. The report repeats
+        // while the server still reports the Cell stage, because the other
+        // player can be finishing it at that moment.
+        if (Simulator::IsCreatureGame() && snapshot.inviteAccepted && snapshot.stage!="creature")
+        {
+            const bool retry = snapshot.stage=="cell" && (!gStageTransitionReported || now>=gStageTransitionTick);
+            if (!gStageTransitionReported || retry)
+            {
+                gStageTransitionReported=true;
+                gStageTransitionTick=now+2000;
+                CoopNet::SubmitStageTransition("creature",snapshot.worldGeneration);
+                WriteProbeLog("Creature stage entered; reported the stage transition to the cooperative session.");
+            }
+        }
         // Only load a campaign fully prepared before either process started.
         if (snapshot.inviteAccepted && snapshot.progressInitialized && snapshot.inviteFrom != CoopNet::GetRole() &&
             snapshot.hasRemotePosition && !gAutoJoinAttempted && now >= gAutoJoinRetryAfter &&

@@ -76,6 +76,51 @@ int main(int argc, char** argv)
             std::cout << "PASS: native client stayed connected for 17 seconds without gameplay.\n";
             return 0;
         }
+        if (argc == 2 && std::string(argv[1]) == "--stage-transition")
+        {
+            // Two native clients complete the real cooperative handshake against
+            // the real server and move the shared world into the Creature stage.
+            // Everything below uses the shipped client code, not a test double.
+            Check(CoopNet::StartFromEnvironment(), "Native client starts");
+            const auto connected = GetTickCount64() + 10000;
+            while (!CoopNet::GetSnapshot().connected && GetTickCount64() < connected) Sleep(20);
+            Check(CoopNet::GetSnapshot().connected, "Native client completed server handshake");
+            if (std::string(CoopNet::GetRole()) == "host")
+            {
+                // The invitation needs the other window online.
+                const auto peer = GetTickCount64() + 10000;
+                while (!CoopNet::GetSnapshot().remotePeerConnected && GetTickCount64() < peer) Sleep(20);
+                Check(CoopNet::GetSnapshot().remotePeerConnected, "The world owner sees the other window online");
+                CoopNet::SubmitInvite();
+                const auto accepted = GetTickCount64() + 10000;
+                while (!CoopNet::GetSnapshot().inviteAccepted && GetTickCount64() < accepted) Sleep(20);
+                Check(CoopNet::GetSnapshot().inviteAccepted, "The world owner sees the accepted invitation");
+                CoopNet::CellProgress progress;
+                progress.food = 1000;
+                progress.plantFood = 1000;
+                progress.playerHasMoved = true;
+                progress.playerHasEaten = true;
+                CoopNet::SeedProgress(progress);
+                Sleep(500);
+                CoopNet::SubmitCellStageComplete(CoopNet::GetSnapshot().worldGeneration);
+                Sleep(500);
+                CoopNet::SubmitStageTransition("creature", CoopNet::GetSnapshot().worldGeneration);
+            }
+            else
+            {
+                const auto pending = GetTickCount64() + 15000;
+                while (!CoopNet::GetSnapshot().invitePending && GetTickCount64() < pending) Sleep(20);
+                Check(CoopNet::GetSnapshot().invitePending, "The guest sees the pending invitation");
+                CoopNet::SubmitInviteResponse(true);
+            }
+            const auto staged = GetTickCount64() + 10000;
+            while (CoopNet::GetSnapshot().stage != "creature" && GetTickCount64() < staged) Sleep(20);
+            const auto snapshot = CoopNet::GetSnapshot();
+            CoopNet::Stop();
+            Check(snapshot.stage == "creature", "The shared session reports the Creature stage");
+            std::cout << "PASS: native client reached the Creature stage through the real server.\n";
+            return 0;
+        }
         Check(TestSharedWorld(),"Shared world coordinates, editor rebase and mission increments");
         TestCampaignData();
         Check(true,"World-save ownership and bounded native history data");
@@ -456,6 +501,21 @@ int main(int argc, char** argv)
             "Completion first observed after owner exit still waits for the open History");
         Check(lateEnding.Observe(gSnapshot.worldGeneration,gSnapshot.cellStageComplete,true,false) && lateEnding.visible,
             "Closing History after owner exit still reaches the ending screen");
+        // The Creature stage milestone: the native client must report the
+        // stage transition exactly as the shared session expects it.
+        gRole="host"; gSnapshot=CoopNet::Snapshot{};
+        HandleMessage(R"({"type":"state","revision":9,"stage":"creature","worldGeneration":53})");
+        Check(gSnapshot.stage=="creature","The shared stage is read from the session snapshot");
+        HandleMessage(R"({"type":"state","revision":10,"worldGeneration":53})");
+        Check(gSnapshot.stage.empty(),"A snapshot without a stage leaves the shared stage unknown");
+        gOutgoing.clear();
+        CoopNet::SubmitStageTransition("creature",53);
+        Check(gOutgoing.size()==1 &&
+            gOutgoing.back()==R"({"type":"stageTransition","stage":"creature","worldGeneration":53})",
+            "The native client reports the Creature stage transition with the world generation");
+        gOutgoing.clear();
+        CoopNet::SubmitStageTransition("tribe",53);
+        Check(gOutgoing.empty(),"Only the Creature stage transition can be reported");
         std::cout << "PASS: " << checks << " native visual/network assertions. No gameplay was tested.\n";
         return 0;
     }

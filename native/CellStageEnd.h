@@ -11,12 +11,16 @@ bool RequestCellStageEnd()
     const auto state=CoopNet::GetSnapshot();
     // Leave the unmodified single-player launch alone; this is the co-op release's boundary.
     if (!state.enabled || !Simulator::IsCellGame()) return false;
+    if (state.connected && state.inviteAccepted) {
+        // A live cooperative session continues into the Creature stage. Report
+        // the completion of the Cell stage and let the native landfall run.
+        UpdateSharedCellProgress(state); // Queue the final pickup before its completion.
+        CoopNet::SubmitCellStageComplete(state.worldGeneration);
+        WriteProbeLog("Cell stage complete; the cooperative session continues into the Creature stage.");
+        return false;
+    }
     if (!gCellStageEnd.requested && !gCellStageEnd.visible) {
         gCellStageEnd.Request(state.worldGeneration);
-        if (state.connected && state.inviteAccepted) {
-            UpdateSharedCellProgress(state); // Queue the final pickup before its completion.
-            CoopNet::SubmitCellStageComplete(state.worldGeneration);
-        }
         WriteProbeLog("Version 1: Cell stage complete; intercepted landfall after History, before the Creature stage.");
     }
     return true;
@@ -88,6 +92,18 @@ void LayoutCellStageEnd()
 
 bool UpdateCellStageEnd(const CoopNet::Snapshot& state)
 {
+    if (state.connected && state.inviteAccepted) {
+        // A live cooperative session continues into the Creature stage, so the
+        // version 1 ending screen must never take over the game.
+        if (gCellStageEnd.visible || gCellStageEnd.requested) {
+            ReleaseCoopPause();
+            for (auto window:{gCellStageEndBlack.get(),gCellStageEndTitle.get(),gCellStageEndDetail.get(),
+                gCellStageEndSteam.get(),gCellStageEndVersion.get(),gCellStageEndMenu.get()})
+                if (window) window->SetFlag(UTFWin::kWinFlagVisible,false);
+            gCellStageEnd.Dismiss();
+        }
+        return false;
+    }
     if (gCellStageEnd.dismissed && state.cellStageComplete && state.sessionEnded) {
         CoopNet::AcknowledgeSessionEnd();
         return true;

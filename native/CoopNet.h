@@ -104,6 +104,8 @@ namespace CoopNet
         // The host alone controls the shared simulation pause.
         bool hostPaused = false;
         bool cellStageComplete = false;
+        // The stage both players share: "cell" or "creature".
+        std::string stage;
 
         bool progressInitialized = false;
         std::uint64_t progressAckSequence = 0;
@@ -144,6 +146,8 @@ namespace CoopNet
     std::vector<std::uint32_t> TakeDietEvents(std::uint64_t appliedRevision);
     void SubmitWorldLeave(std::uint64_t world);
     void SubmitCellStageComplete(std::uint64_t world);
+    // Reports the stage the client entered so the shared session follows it.
+    void SubmitStageTransition(const char* stage, std::uint64_t world);
     std::uint64_t SubmitWorldAction(WorldAction action);
     std::vector<WorldAction> TakeWorldActions();
     void SeedProgress(const CellProgress& progress, const std::string& speciesName = {});

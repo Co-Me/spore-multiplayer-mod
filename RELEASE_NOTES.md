@@ -1,3 +1,44 @@
+# Creature-stage patch — Co-Me fork — October 22, 2026
+
+Cell stage, plus the transition into the Creature stage. Protocol remains 10; the new
+message is additive, so an unmodified Version 1.0.1 client still connects to this
+server and vice versa.
+
+- The co-op session no longer stops at the end of the Cell stage. The Cell stage
+  completion is reported to the session server, the native landfall runs and the
+  land editor opens, instead of the version 1 ending screen taking over the game.
+  The ending screen is still used when the mod runs without a cooperative session.
+- The client reports the stage it entered with a new `stageTransition` message,
+  sent when `Simulator::IsCreatureGame()` is true and the session has an accepted
+  invitation. The report repeats every two seconds while the server still reports
+  the Cell stage, because the other player can be finishing it at that moment, and
+  stops as soon as the server confirms the Creature stage.
+- The server accepts the transition only with an accepted invitation, a matching
+  world generation, a completed Cell stage and the supported stage name
+  `creature`. It advances the shared stage, clears the editor and evolution
+  state, and broadcasts the new stage to both windows. A repeated transition is
+  idempotent.
+- The Cell stage completion is now a fact about the shared world instead of
+  transient session state, so it survives a server restart. The shared stage is
+  persisted the same way. The land editor is no longer blocked by the Cell stage
+  completion, because the editor is the design step for the creature.
+- The server banner now reads `Supported stages: Cell, Creature.`
+
+- Not implemented: Creature-stage gameplay synchronisation. Two players still do
+  not see each other's creature, a shared planet, shared herds or creature
+  interactions; the Creature simulator stays local to each window.
+- Verified with the shipped client code and the real session server over TCP:
+  `tests/native-stage.test.mjs` completes the real invitation handshake with two
+  native clients and moves the shared world from `cell` to `creature`, and the
+  saved session records the new stage. Passed 148 server checks, 119 client
+  checks, the source invariants and the new end-to-end test.
+- The rebuilt DLL was loaded into two live game windows against the real server
+  and both completed the handshake. The Cell stage has not been played through to
+  its end in a running game, so the landfall, the land editor and the stage
+  report still need one interactive confirmation.
+
+---
+
 # Version 1.0.1 — part fragments from guest kills — September 27, 2026
 
 Cell stage only. Protocol remains 10; the server is compatible with Version 1.0.0.
